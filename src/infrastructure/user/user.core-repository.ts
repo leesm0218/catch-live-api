@@ -6,6 +6,7 @@ import { TokenEntity } from 'src/domain/user/token.entity';
 import { SignupCommand } from 'src/domain/auth/command/signup.command';
 import { DomainCustomException } from 'src/domain/common/errors/domain-custom-exception';
 import { DomainErrorCode } from 'src/domain/common/errors/domain-error-code';
+import { UserRequestCommand } from 'src/domain/user/user.command';
 
 @Injectable()
 export class UserCoreRepository implements UserRepository {
@@ -121,5 +122,32 @@ export class UserCoreRepository implements UserRepository {
         DomainErrorCode.DB_SERVER_ERROR
       );
     }
+  }
+
+  async signout(requestDto: UserRequestCommand) {
+    await this.prisma.$transaction(async (prisma) => {
+      const signoutUser = await prisma.user.update({
+        where: {
+          user_id: requestDto.userId,
+          is_deleted: false,
+        },
+        data: { is_deleted: true, updated_at: new Date() },
+      });
+      if (!signoutUser) {
+        throw new DomainCustomException(500, DomainErrorCode.DB_SERVER_ERROR);
+      }
+
+      const signoutToken = await this.prisma.token.update({
+        where: {
+          user_id: requestDto.userId,
+        },
+        data: { refresh_token: '', updated_at: new Date() },
+      });
+      if (!signoutToken) {
+        throw new DomainCustomException(500, DomainErrorCode.DB_SERVER_ERROR);
+      }
+    });
+
+    return true;
   }
 }
